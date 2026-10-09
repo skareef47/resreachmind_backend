@@ -6,15 +6,19 @@ and Actionable Roadmap Generation.
 """
 
 import logging
-from typing import List, Optional
+from typing import Any, List, Optional
 
+from app.intelligence.architecture import ArchitectureGenerator
 from app.intelligence.buildability import BuildabilityEvaluator
 from app.intelligence.explainer import RankingExplainer
 from app.intelligence.graph import KnowledgeGraphBuilder
+from app.intelligence.gaps import ResearchGapAnalyzer
 from app.intelligence.models import (
     BuildabilityReport,
     KnowledgeGraph,
     RankingExplanation,
+    ResearchArchitectureResponse,
+    ResearchGapsResponse,
     ResearchIntelligenceReport,
     ResearchRoadmap,
 )
@@ -36,6 +40,8 @@ class ResearchIntelligenceService:
         self.buildability_evaluator = BuildabilityEvaluator()
         self.graph_builder = KnowledgeGraphBuilder()
         self.roadmap_generator = RoadmapGenerator()
+        self.architecture_generator = ArchitectureGenerator(evaluator=self.buildability_evaluator)
+        self.gap_analyzer = ResearchGapAnalyzer(graph_builder=self.graph_builder)
 
     def explain_run(self, run_id: str, document_id: Optional[str] = None) -> List[RankingExplanation]:
         """Explain ranking decisions for a stored run or a specific document in it."""
@@ -54,9 +60,40 @@ class ResearchIntelligenceService:
         """Construct multi-entity knowledge graph with provenance."""
         return self.graph_builder.build_graph(documents)
 
-    def generate_roadmap(self, query: str, documents: List[ResearchDocument]) -> ResearchRoadmap:
-        """Generate 7-stage engineering roadmap grounded in research."""
-        return self.roadmap_generator.generate_roadmap(query=query, documents=documents)
+    def generate_roadmap(
+        self,
+        documents: Optional[List[ResearchDocument]] = None,
+        architecture: Optional[Any] = None,
+        constraints: Optional[dict] = None,
+        query: Optional[str] = None,
+        **kwargs,
+    ) -> ResearchRoadmap:
+        """Generate actionable implementation roadmap grounded in research."""
+        return self.roadmap_generator.generate_roadmap(
+            documents=documents, architecture=architecture, constraints=constraints, query=query, **kwargs
+        )
+
+    def generate_architecture(
+        self,
+        documents: List[ResearchDocument],
+        constraints: Optional[dict] = None,
+        query: Optional[str] = None,
+    ) -> ResearchArchitectureResponse:
+        """Synthesize concrete technical architecture from selected research papers."""
+        return self.architecture_generator.generate_architecture(
+            documents=documents, constraints=constraints, query=query
+        )
+
+    def analyze_research_gaps(
+        self,
+        documents: List[ResearchDocument],
+        query: Optional[str] = None,
+        knowledge_graph: Optional[KnowledgeGraph] = None,
+    ) -> ResearchGapsResponse:
+        """Analyze research landscape across candidate papers to identify evidence-backed potential gaps."""
+        return self.gap_analyzer.analyze_gaps(
+            documents=documents, query=query, knowledge_graph=knowledge_graph
+        )
 
     def generate_full_report(
         self,

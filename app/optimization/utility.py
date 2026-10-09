@@ -119,25 +119,19 @@ def get_utility_run_store() -> UtilityRunStore:
 
 def compute_buildability_proxy(candidate: RetrievedCandidate) -> float:
     """
-    Preliminary engineering buildability proxy score in [0.0, 1.0].
+    Engineering buildability score in [0.0, 1.0] calculated per-paper.
     
-    Evaluates:
-    - Verifiable code URL: +0.50
-    - Pretrained model checkpoints: +0.20
-    - Benchmark datasets: +0.20
-    - Documented methods: +0.10
+    Evaluates paper-specific code, dataset, model, documentation,
+    hardware requirements, licensing, and reproducibility evidence.
     """
     doc = candidate.document
-    score = 0.0
-    if doc.code_url and doc.code_url.strip():
-        score += 0.50
-    if doc.models:
-        score += 0.20
-    if doc.datasets:
-        score += 0.20
-    if doc.methods:
-        score += 0.10
-    return round(min(1.0, score), 4)
+    if doc.buildability_score is not None:
+        return float(doc.buildability_score)
+    if candidate.features and "buildability" in candidate.features and candidate.features["buildability"] > 0.0:
+        return float(candidate.features["buildability"])
+    from app.intelligence.buildability import BuildabilityEvaluator
+    report = BuildabilityEvaluator().evaluate_document(doc)
+    return float(report.overall_score)
 
 
 def compute_source_quality(candidate: RetrievedCandidate) -> float:
@@ -309,17 +303,32 @@ class FormalUtilityModel:
                 cand_copy = cand.model_copy(deep=True)
                 if cand_copy.features is None:
                     cand_copy.features = {}
+                cand_copy.features["relevance"] = scores.relevance
                 cand_copy.features["utility_score"] = scores.utility_score
                 cand_copy.features["preference_match"] = scores.preference_match
                 cand_copy.features["feedback_match"] = scores.feedback_match
                 cand_copy.features["buildability"] = scores.buildability
                 cand_copy.features["source_quality"] = scores.source_quality
+                cand_copy.features["recency"] = scores.recency
                 cand_copy.features["penalties"] = scores.penalties
+
+                # Also populate top-level schema fields on the canonical document
+                cand_copy.document.paper_id = cand_copy.document.internal_id
+                cand_copy.document.relevance_score = scores.relevance
+                cand_copy.document.utility_score = scores.utility_score
+                cand_copy.document.preference_contribution = round(w.w2_preference_match * scores.preference_match, 4)
+                cand_copy.document.feedback_contribution = round(w.w3_feedback_match * scores.feedback_match, 4)
+                cand_copy.document.constraint_penalty = scores.penalties
+                cand_copy.document.buildability_evidence = cand_copy.document.buildability_breakdown
                 admissible_candidates.append((cand_copy, scores))
 
         # 4. Sort admissible candidates by utility score descending
         admissible_candidates.sort(key=lambda x: x[1].utility_score, reverse=True)
         ranked_candidates = [c for c, _ in admissible_candidates]
+        for rank_pos, c in enumerate(ranked_candidates, start=1):
+            c.document.rank = rank_pos
+            if c.features is not None:
+                c.features["optimal_rank"] = rank_pos
 
         # 5. Persist run record
         run_record = UtilityRunRecord(

@@ -191,12 +191,24 @@ class GlobalRankingOptimizer:
                 cand_copy = cand.model_copy(deep=True)
                 if cand_copy.features is None:
                     cand_copy.features = {}
+                cand_copy.features["relevance"] = scores.relevance
                 cand_copy.features["utility_score"] = scores.utility_score
                 cand_copy.features["preference_match"] = scores.preference_match
                 cand_copy.features["feedback_match"] = scores.feedback_match
                 cand_copy.features["buildability"] = scores.buildability
                 cand_copy.features["source_quality"] = scores.source_quality
+                cand_copy.features["recency"] = scores.recency
                 cand_copy.features["penalties"] = scores.penalties
+
+                # Populate document attributes
+                cand_copy.document.paper_id = cand_copy.document.internal_id
+                cand_copy.document.relevance_score = scores.relevance
+                cand_copy.document.utility_score = scores.utility_score
+                cand_copy.document.preference_contribution = round(weights.w2_preference_match * scores.preference_match, 4)
+                cand_copy.document.feedback_contribution = round(weights.w3_feedback_match * scores.feedback_match, 4)
+                cand_copy.document.constraint_penalty = scores.penalties
+                cand_copy.document.buildability_evidence = cand_copy.document.buildability_breakdown
+
                 admissible_candidates.append(cand_copy)
                 admissible_utilities.append(scores.utility_score)
 
@@ -253,6 +265,7 @@ class GlobalRankingOptimizer:
             if c.features is None:
                 c.features = {}
             c.features["optimal_rank"] = rank_pos + 1
+            c.document.rank = rank_pos + 1
             ranked_candidates.append(c)
 
         # 6. Independent Verification Audit
@@ -276,6 +289,7 @@ class GlobalRankingOptimizer:
             objective_value=reported_obj,
             solver_used=solver.solver_type,
             solver_status=solver_status,
+            optimization_status=verification_report.optimization_status,
             verification=verification_report,
             guarantee_scope=OPTIMALITY_GUARANTEE_STATEMENT,
         )

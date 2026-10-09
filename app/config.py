@@ -14,7 +14,12 @@ class Settings(BaseSettings):
     API_PREFIX: str = "/api/v1"
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
-    CORS_ORIGINS: Union[str, List[str]] = ["http://localhost:3000"]
+    CORS_ORIGINS: Union[str, List[str]] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
 
     # Source provider configurations (Phase 2)
     SEMANTIC_SCHOLAR_BASE_URL: str = "https://api.semanticscholar.org/graph/v1"

@@ -23,6 +23,10 @@ class SearchConstraints(BaseModel):
     # 1. Hard Required Constraints (Candidate must satisfy all, else disqualified)
     require_code: bool = Field(default=False, description="Must have verified open-source code URL")
     require_open_access: bool = Field(default=False, description="Must be open-access publication")
+    require_dataset: bool = Field(default=False, description="Must have verified dataset availability")
+    require_model: bool = Field(default=False, description="Must have verified pretrained model checkpoints")
+    min_relevance: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Minimum relevance score threshold")
+    min_buildability: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Minimum buildability score threshold")
     min_year: Optional[int] = Field(default=None, description="Earliest allowable publication year")
     max_year: Optional[int] = Field(default=None, description="Latest allowable publication year")
     min_citations: Optional[int] = Field(default=None, ge=0, description="Minimum citation threshold")
@@ -198,6 +202,47 @@ class ConstraintEvaluator:
             if c_cnt < constraints.min_citations:
                 hard_violations.append(
                     f"Citations ({c_cnt}) below min_citations ({constraints.min_citations})"
+                )
+
+        if constraints.require_dataset:
+            has_dataset = bool(doc.datasets and len(doc.datasets) > 0)
+            if not has_dataset and doc.buildability_breakdown:
+                ds_info = doc.buildability_breakdown.get("dataset")
+                if isinstance(ds_info, dict) and ds_info.get("status") == "verified":
+                    has_dataset = True
+            if not has_dataset:
+                hard_violations.append("Missing verified dataset availability")
+
+        if constraints.require_model:
+            has_model = bool(doc.models and len(doc.models) > 0)
+            if not has_model and doc.buildability_breakdown:
+                m_info = doc.buildability_breakdown.get("pretrained_model") or doc.buildability_breakdown.get("model")
+                if isinstance(m_info, dict) and m_info.get("status") == "verified":
+                    has_model = True
+            if not has_model:
+                hard_violations.append("Missing verified pretrained model availability")
+
+        if constraints.min_relevance is not None:
+            rel = 0.5
+            if candidate.rerank_metadata and candidate.rerank_metadata.reranker_score is not None:
+                rel = candidate.rerank_metadata.reranker_score
+            elif candidate.features and "cross_encoder_score" in candidate.features:
+                rel = candidate.features["cross_encoder_score"]
+            elif candidate.metadata and candidate.metadata.sbert_score is not None:
+                rel = max(0.0, min(1.0, (candidate.metadata.sbert_score + 1.0) / 2.0))
+            if rel < constraints.min_relevance:
+                hard_violations.append(
+                    f"Relevance ({rel:.3f}) below min_relevance ({constraints.min_relevance:.3f})"
+                )
+
+        if constraints.min_buildability is not None:
+            bld = doc.buildability_score
+            if bld is None and candidate.features:
+                bld = candidate.features.get("buildability")
+            bld_val = float(bld or 0.0)
+            if bld_val < constraints.min_buildability:
+                hard_violations.append(
+                    f"Buildability ({bld_val:.3f}) below min_buildability ({constraints.min_buildability:.3f})"
                 )
 
         if constraints.required_venues:

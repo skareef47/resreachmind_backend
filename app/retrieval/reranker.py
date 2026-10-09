@@ -52,24 +52,31 @@ class DeterministicCrossEncoderEngine:
         matched_tokens = [t for t in q_tokens if t in doc_token_set]
         coverage = len(matched_tokens) / len(q_tokens)
 
-        # Baseline logit from coverage
-        logit = (coverage * 4.0) - 2.0
+        # Baseline logit from token coverage
+        logit = (coverage * 2.5) - 1.5
 
-        # Exact phrase bonus
+        # Exact phrase bonus (calibrated)
         if q_lower in doc_lower:
-            logit += 2.5
+            logit += 1.0
+
+        # Title alignment and specificity (title token Jaccard)
+        first_segment = doc_lower[:150]
+        title_tokens = set(tokenize_text(first_segment))
+        if title_tokens:
+            q_token_set = set(q_tokens)
+            title_jaccard = len(q_token_set.intersection(title_tokens)) / len(q_token_set.union(title_tokens))
+            logit += title_jaccard * 1.5
+
+        # Term frequency density in document
+        total_tf = sum(doc_tokens.count(t) for t in q_tokens)
+        density = min(1.0, total_tf / max(10, len(doc_tokens)))
+        logit += density * 1.0
 
         # Acronym & exact technical term bonus (e.g. BERT, RRF, ViT, GNN)
         acronyms = re.findall(r"\b[A-Z0-9]{2,}\b", query)
         for acr in acronyms:
             if acr in text:
-                logit += 1.5
-
-        # Early position discount: bonus if query terms appear in first 150 characters (title)
-        first_segment = doc_lower[:150]
-        title_matches = sum(1 for t in q_tokens if t in first_segment)
-        if title_matches > 0:
-            logit += (title_matches / len(q_tokens)) * 1.5
+                logit += 0.5
 
         return round(logit, 4)
 

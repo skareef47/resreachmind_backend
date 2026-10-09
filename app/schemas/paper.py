@@ -53,3 +53,60 @@ class ResearchDocument(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc).isoformat(),
         description="ISO 8601 UTC timestamp of initial retrieval",
     )
+    buildability_score: Optional[float] = Field(
+        default=None,
+        description="Paper-specific engineering buildability score in [0.0, 1.0]",
+    )
+    buildability: Optional[float] = Field(
+        default=None,
+        description="Paper-specific engineering buildability score in [0.0, 1.0]",
+    )
+    buildability_breakdown: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Paper-specific buildability dimensional feature and evidence provenance breakdown",
+    )
+    evidence_sources: List[str] = Field(
+        default_factory=list,
+        description="Verifiable external URLs supporting the paper's buildability assessment",
+    )
+    unknown_fields: List[str] = Field(
+        default_factory=list,
+        description="List of dimensions unverified from available sources",
+    )
+    paper_id: Optional[str] = Field(
+        default=None,
+        description="Unique identifier alias for internal_id",
+    )
+    relevance_score: Optional[float] = Field(
+        default=None,
+        description="Normalized relevance score in [0.0, 1.0]",
+    )
+    utility_score: Optional[float] = Field(
+        default=None,
+        description="Composite scalar utility score U(R)",
+    )
+    rank: Optional[int] = Field(
+        default=None,
+        description="Rank position in final ranking",
+    )
+    preference_contribution: Optional[float] = Field(
+        default=None,
+        description="Attributed contribution from user preference profile",
+    )
+    feedback_contribution: Optional[float] = Field(
+        default=None,
+        description="Attributed contribution from user feedback signals",
+    )
+    constraint_penalty: Optional[float] = Field(
+        default=None,
+        description="Soft constraint penalty deducted from utility",
+    )
+    explanation: Optional[str] = Field(
+        default=None,
+        description="Grounded transparent natural language explanation of ranking",
+    )
+    buildability_evidence: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Detailed 9-dimensional buildability evidence and status dictionary",
+    )
+

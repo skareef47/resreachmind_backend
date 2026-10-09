@@ -12,6 +12,7 @@ from starlette.responses import JSONResponse
 from app.api import api_router
 from app.config import get_settings
 from app.db.session import init_db
+from app.observability import RedactingLogFilter, RequestLoggingMiddleware
 from app.schemas.common import RootResponse
 
 settings = get_settings()
@@ -24,6 +25,13 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger("researchmind")
 
+# Attach secret redacting filter to root logger and handlers
+_redacting_filter = RedactingLogFilter()
+logging.getLogger().addFilter(_redacting_filter)
+for _h in logging.getLogger().handlers:
+    _h.addFilter(_redacting_filter)
+
+
 
 class RateLimiterMiddleware(BaseHTTPMiddleware):
     """In-memory rate limiter per IP address respecting configured thresholds."""
@@ -35,6 +43,8 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         self.requests: dict[str, list[float]] = defaultdict(list)
 
     async def dispatch(self, request: Request, call_next):
+        if request.method == "OPTIONS":
+            return await call_next(request)
         path = request.url.path
         if self.max_requests <= 0 or path in [
             "/docs",
@@ -101,7 +111,16 @@ def create_application() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Configure CORS for frontend access
+    # Request logging and tracing middleware
+    app.add_middleware(RequestLoggingMiddleware)
+
+    # Rate limiting middleware
+    app.add_middleware(
+        RateLimiterMiddleware,
+        max_requests_per_minute=settings.RATE_LIMIT_REQUESTS_PER_MINUTE,
+    )
+
+    # Configure CORS for frontend access (added outermost)
     origins = settings.CORS_ORIGINS if settings.CORS_ORIGINS else ["http://localhost:3000"]
     app.add_middleware(
         CORSMiddleware,
@@ -109,12 +128,6 @@ def create_application() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-    )
-
-    # Rate limiting middleware
-    app.add_middleware(
-        RateLimiterMiddleware,
-        max_requests_per_minute=settings.RATE_LIMIT_REQUESTS_PER_MINUTE,
     )
 
     # Root endpoint

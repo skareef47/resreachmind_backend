@@ -40,26 +40,51 @@ class HybridRetrievalPipeline:
         limit = candidate_limit if candidate_limit is not None else self.default_candidate_limit
         bounded_limit = max(1, min(limit, 100))
 
+        import time
+        from app.observability.metrics import get_metrics_collector
+        metrics = get_metrics_collector()
+
         # 1. Lexical retrieval via BM25
+        t_bm25 = time.perf_counter()
         bm25_ranked = self.bm25.rank(query, documents)
+        bm25_ms = (time.perf_counter() - t_bm25) * 1000.0
+        metrics.record_latency("bm25_latency", bm25_ms)
 
         # 2. Semantic retrieval via SBERT
+        t_sbert = time.perf_counter()
         sbert_ranked = self.sbert.rank(query, documents)
+        sbert_ms = (time.perf_counter() - t_sbert) * 1000.0
+        metrics.record_latency("sbert_latency", sbert_ms)
 
         # 3. Reciprocal Rank Fusion aggregation
+        t_rrf = time.perf_counter()
         candidates = self.rrf.combine(
             bm25_results=bm25_ranked,
             sbert_results=sbert_ranked,
             candidate_limit=bounded_limit,
         )
+        rrf_ms = (time.perf_counter() - t_rrf) * 1000.0
+        metrics.record_latency("rrf_latency", rrf_ms)
 
         # 4. Cross-Encoder reranking (Phase 5)
+        ce_ms = 0.0
         if rerank and self.reranker is not None:
+            t_ce = time.perf_counter()
             candidates = await self.reranker.rerank(
                 query=query,
                 candidates=candidates,
                 candidate_limit=bounded_limit,
             )
+            ce_ms = (time.perf_counter() - t_ce) * 1000.0
+            metrics.record_latency("cross_encoder_latency", ce_ms)
+            metrics.record_latency("reranking_latency", ce_ms)
+
+        self.last_latencies = {
+            "bm25_latency": bm25_ms,
+            "sbert_latency": sbert_ms,
+            "rrf_latency": rrf_ms,
+            "cross_encoder_latency": ce_ms,
+        }
 
         return candidates
 

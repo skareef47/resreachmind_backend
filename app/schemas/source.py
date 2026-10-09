@@ -97,6 +97,21 @@ class SearchRequest(BaseModel):
         default=False, description="Whether to generate Phase 8 Research Intelligence report"
     )
 
+    top_k: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=100,
+        description="Optional alias for limit (top k results to return)",
+    )
+    optimization: Optional[Any] = Field(
+        default=None,
+        description="Optional optimization parameters dictionary or boolean toggle",
+    )
+    verification: bool = Field(
+        default=True,
+        description="Whether to perform formal optimality verification",
+    )
+
     @field_validator("query")
     @classmethod
     def clean_query(cls, v: str) -> str:
@@ -125,6 +140,10 @@ class SearchResponse(BaseModel):
         description="Cache hit indicators per queried provider",
     )
     results: List[ResearchDocument] = Field(..., description="Canonical research documents retrieved")
+    papers: List[ResearchDocument] = Field(
+        default_factory=list,
+        description="Canonical research documents (alias for results for frontend and test compatibility)",
+    )
     candidates: List[RetrievedCandidate] = Field(
         default_factory=list,
         description="Bounded hybrid retrieval candidates with BM25, SBERT, and RRF metadata",
@@ -133,6 +152,14 @@ class SearchResponse(BaseModel):
         default=None,
         description="Persisted utility evaluation run identifier if utility model was applied",
     )
+    request_id: Optional[str] = Field(
+        default=None,
+        description="Unique trace request ID for distributed tracing and observability",
+    )
+    optimization: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Structured optimization and verification metadata (method, status, optimality_gap, verified)",
+    )
     optimization_result: Optional[Any] = Field(
         default=None,
         description="Phase 7 formal global ranking optimization result and verification report",
@@ -140,6 +167,10 @@ class SearchResponse(BaseModel):
     intelligence: Optional[Any] = Field(
         default=None,
         description="Phase 8 research intelligence report (explainability, buildability, graph, roadmap)",
+    )
+    knowledge_graph: Optional[Any] = Field(
+        default=None,
+        description="Phase 8 scholarly knowledge graph synthesized from retrieved candidates",
     )
 
 

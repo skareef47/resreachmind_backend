@@ -17,6 +17,7 @@ import numpy as np
 from app.optimization.constraints import ConstraintEvaluator, SearchConstraints
 from app.optimization.models import (
     ObjectiveType,
+    OptimizationStatus,
     SolverStatus,
     SolverType,
     VerificationReport,
@@ -193,6 +194,16 @@ class OptimizationVerifier:
                 verification_status = VerificationStatus.VERIFIED_FEASIBLE
                 is_verified = True
 
+        # Determine formal OptimizationStatus semantics
+        if exhaustive_performed and approximation_gap is not None and approximation_gap <= 1e-4:
+            opt_status = OptimizationStatus.EXACT_VERIFIED
+        elif solver_status == SolverStatus.APPROXIMATE or (approximation_gap is not None and approximation_gap > 1e-4):
+            opt_status = OptimizationStatus.APPROXIMATE_OPTIMIZED
+        elif is_verified and solver_status == SolverStatus.OPTIMAL:
+            opt_status = OptimizationStatus.GLOBALLY_OPTIMIZED
+        else:
+            opt_status = OptimizationStatus.APPROXIMATE_OPTIMIZED
+
         details = dict(solver_details or {})
         details["independent_evaluator"] = "evaluate_ranking_objective"
         details["exhaustive_threshold"] = self.exhaustive_threshold
@@ -200,6 +211,7 @@ class OptimizationVerifier:
         return VerificationReport(
             is_verified=is_verified,
             verification_status=verification_status,
+            optimization_status=opt_status,
             solver_status=solver_status,
             candidate_count=n,
             k=target_k,

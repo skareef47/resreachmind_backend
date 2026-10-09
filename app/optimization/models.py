@@ -44,6 +44,21 @@ class VerificationStatus(str, Enum):
     VERIFICATION_FAILED = "verification_failed"
 
 
+class OptimizationStatus(str, Enum):
+    """
+    Formal optimization guarantee semantics.
+    
+    Distinguishes:
+    - EXACT_VERIFIED: Verified against exhaustive permutation enumeration (N <= 10, Delta U <= 1e-4)
+    - GLOBALLY_OPTIMIZED: Proven optimal over candidate set D under the defined utility and constraints
+    - APPROXIMATE_OPTIMIZED: Polynomial-time bounded approximation (e.g. Greedy or MILP fallback)
+    """
+
+    EXACT_VERIFIED = "exact_verified"
+    GLOBALLY_OPTIMIZED = "globally_optimized"
+    APPROXIMATE_OPTIMIZED = "approximate_optimized"
+
+
 class OptimizationProblem(BaseModel):
     """
     Formal ranking optimization problem:
@@ -106,6 +121,10 @@ class VerificationReport(BaseModel):
         default=None,
         description="Approximation gap: Delta U = U(R_exact) - U(R_approx) (>= 0.0)",
     )
+    optimization_status: OptimizationStatus = Field(
+        default=OptimizationStatus.GLOBALLY_OPTIMIZED,
+        description="Formal guarantee category: exact_verified, globally_optimized, or approximate_optimized",
+    )
     details: Dict[str, Any] = Field(default_factory=dict, description="Additional solver telemetry")
 
 
@@ -118,6 +137,10 @@ class OptimizationResult(BaseModel):
     objective_value: float = Field(..., description="Final objective function value achieved")
     solver_used: SolverType = Field(..., description="Algorithm employed to obtain ranking")
     solver_status: SolverStatus = Field(..., description="Status of solver convergence")
+    optimization_status: OptimizationStatus = Field(
+        default=OptimizationStatus.GLOBALLY_OPTIMIZED,
+        description="Formal guarantee category: exact_verified, globally_optimized, or approximate_optimized",
+    )
     verification: VerificationReport = Field(..., description="Independent verification audit")
     guarantee_scope: str = Field(
         default="globally optimal over the retrieved candidate set under the explicitly defined utility and constraints",

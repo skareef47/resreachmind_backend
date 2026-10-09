@@ -69,6 +69,12 @@ class RelevanceFeatures(BaseModel):
     has_open_access: float = Field(
         default=0.0, description="Indicator for open-access availability (0.0 or 1.0)"
     )
+    buildability: float = Field(
+        default=0.0, description="Paper-specific engineering buildability score [0.0, 1.0]"
+    )
+    utility_score: float = Field(
+        default=0.0, description="Preliminary scalar utility score [0.0, 1.0]"
+    )
 
     def to_dict(self) -> Dict[str, float]:
         """Convert features to a dictionary of float values for downstream modeling."""
@@ -86,6 +92,8 @@ class RelevanceFeatures(BaseModel):
             "recency_score": float(self.recency_score),
             "has_code": float(self.has_code),
             "has_open_access": float(self.has_open_access),
+            "buildability": float(self.buildability),
+            "utility_score": float(self.utility_score),
         }
 
 
@@ -97,7 +105,7 @@ def extract_candidate_features(
     Extract intermediate relevance and metadata features for a candidate research document.
     
     Treats Cross-Encoder score as an intermediate relevance feature alongside lexical,
-    semantic, and bibliographic priors.
+    semantic, and bibliographic priors, and computes paper-specific buildability evidence.
     """
     doc = candidate.document
     meta = candidate.metadata
@@ -111,6 +119,20 @@ def extract_candidate_features(
 
     ce_score = rerank.reranker_score if rerank is not None else 0.0
     ce_raw = rerank.raw_score if rerank is not None else None
+
+    # Paper-specific buildability evaluation
+    from app.intelligence.buildability import BuildabilityEvaluator
+    bld_report = BuildabilityEvaluator().evaluate_document(doc)
+    bld_val = round(bld_report.overall_score, 4)
+    doc.buildability_score = bld_val
+    doc.buildability = bld_val
+    doc.buildability_breakdown = bld_report.evidence_breakdown
+    doc.evidence_sources = bld_report.evidence_sources
+    doc.unknown_fields = bld_report.unknown_fields
+
+    # Preliminary utility proxy U(R) before formal constraints or optimization
+    qual_norm = min(1.0, math.log10(max(1, citation_cnt + 1)) / 4.0)
+    prelim_u = round(0.40 * ce_score + 0.25 * bld_val + 0.20 * qual_norm + 0.15 * recency, 6)
 
     features = RelevanceFeatures(
         bm25_score=meta.bm25_score or 0.0,
@@ -126,6 +148,9 @@ def extract_candidate_features(
         recency_score=recency,
         has_code=has_code_val,
         has_open_access=has_oa_val,
+        buildability=bld_val,
+        utility_score=prelim_u,
     )
 
     return features.to_dict()
+
